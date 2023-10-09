@@ -10,7 +10,7 @@ from args import init_args
 from VGAE import fGCNModelVAE, sGCNModelVAE
 from loss import VGAE_Loss, Implicit_Contrastive_Loss
 from model import GCN_Encoder, Linear_Classifier, Attention_Emb
-from utils import preprocess, features_construct_graph, spatial_construct_graph, pred_result, Reconstruct_Ratio
+from utils import preprocess, features_construct_graph, spatial_construct_graph, Reconstruct_Ratio, clustering
 
 """
 import matplotlib as plt
@@ -33,7 +33,7 @@ def train():
     Encoder = GCN_Encoder(nfeat=feat.shape[1], nhid=args.hidden_size, nemb=args.emb_size, dropout=args.dropout).to(
         device)
 
-    Classifier = Linear_Classifier(args.emb_size, args.n_cluster).to(device)
+    #Classifier = Linear_Classifier(args.emb_size, args.n_cluster).to(device)
 
     Attention = Attention_Emb(args.emb_size).to(device)
 
@@ -41,7 +41,7 @@ def train():
     optimizer_fvgae = torch.optim.Adam(fVGAE.parameters(), lr=0.01, weight_decay=0)
     optimizer_svgae = torch.optim.Adam(sVGAE.parameters(), lr=0.01, weight_decay=0)
     optimizer_encoder = torch.optim.Adam(Encoder.parameters(), lr=args.lr, weight_decay=args.l2)
-    optimizer_classifier = torch.optim.Adam(Classifier.parameters(), lr=5e-3, weight_decay=5e-4)
+    #optimizer_classifier = torch.optim.Adam(Classifier.parameters(), lr=5e-3, weight_decay=5e-4)
 
     best_adj_acc = 0
     adj_acc = 0.1
@@ -50,7 +50,7 @@ def train():
         fVGAE.train()
         sVGAE.train()
         Encoder.train()
-        Classifier.train()
+        #Classifier.train()
 
         fpred, fmu, flog_sigma = fVGAE(feat, fadj)
         femb = Encoder(feat, fadj)
@@ -104,7 +104,7 @@ def train():
         femb = Encoder(feat, fadj)
         semb = Encoder(feat, sadj)
         emb = Attention(torch.stack([femb, semb], dim=1))  # (3611,256)
-
+        """
         for iteration in range(100):
             optimizer_classifier.zero_grad()
             y_pred = Classifier(emb.detach())
@@ -124,15 +124,15 @@ def train():
 
         # acc = pred_result(val_pred, y)
         # acc_list.append(acc)
-
+        
         nmi = metrics.normalized_mutual_info_score(y.cpu(), y_pred)  # 0.62 0.687 0.7147 0.7145
         ari = metrics.adjusted_rand_score(y.cpu(), y_pred)  # 0.49 0.633 0.6836 0.67789
         print('Iter {}'.format(epoch), ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari))
-
+        """
         fadj_acc = Reconstruct_Ratio(fpred.cpu(), fadj_ori)  # 0.0097
         sadj_acc = Reconstruct_Ratio(spred.cpu(), sadj_ori)  # 0.014
         adj_acc = fadj_acc + sadj_acc  # 0.0239 0.0239 0.114 0.98 0.979
-
+    """
     Encoder.eval()
     femb = Encoder(feat, fadj)
     semb = Encoder(feat, sadj)
@@ -141,33 +141,43 @@ def train():
     out = Classifier(emb.detach())
     _, y_pred = out.max(dim=1)
     y_pred = y_pred.cpu()
-
+    
     nmi = metrics.normalized_mutual_info_score(y.cpu(), y_pred)
     ari = metrics.adjusted_rand_score(y.cpu(), y_pred)
     print('Final', ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari))
-
+    
     adata.obs['y_pred'] = y_pred
     adata.obs['y_pred'] = adata.obs['y_pred'].astype('int')
     adata.obs['y_pred'] = adata.obs['y_pred'].astype('category')
-
+    
     sc.pl.spatial(adata,
-                  color=["ground_truth", "y_pred"],
-                  title=["Ground truth", "ARI=%.4f" % ari],
-                  show=True)
+                  color=["y_pred"],
+                  title=["ARI=%.2f" % ari],
+                  show=True,
+                  size=1.3)
+    """
+    adata.obsm['emb'] = emb.detach().cpu().numpy()
+    np.savetxt('/opt/data/private/save/data.csv', adata.obsm['emb'])
+    clustering(adata, method='louvain')
+    sc.pl.embedding(adata, basis="spatial",
+                    color="domain",
+                    s=30,
+                    show=True)
 
 
 if __name__ == '__main__':
     args = init_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    adata = sc.read_visium('/opt/data/private/DataSet/Human_breast_cancer (10x)', count_file='filtered_feature_bc_matrix.h5')
+    adata = sc.read_h5ad('/opt/data/private/DataSet/Mouse_Olfactory_bulb (Stereo-seq)/filtered_feature_bc_matrix.h5ad')
     adata.var_names_make_unique()  # (3639,33538)
 
-    label = pd.read_csv('/opt/data/private/DataSet/Human_breast_cancer (10x)' + '/metadata.tsv', sep='\t')
-    adata.obs['label'] = torch.LongTensor(pd.factorize(label['fine_annot_type'].astype("category"))[0])
-    adata.obs['ground_truth'] = label['fine_annot_type'].values
-    adata = adata[~pd.isnull(adata.obs['ground_truth'])]
-    y = torch.LongTensor(adata.obs['label'].values).to(device)
+    #label = pd.read_csv('/opt/data/private/DataSet/DLPFC/151671' + '/metadata.tsv', sep='\t')
+    #adata.obs['label'] = torch.LongTensor(pd.factorize(label['layer_guess'].astype("category"))[0])
+    #adata.obs['ground_truth'] = label['fine_annot_type'].values
+    #adata.obs['ground_truth'] = label['layer_guess'].values
+    #adata = adata[~pd.isnull(adata.obs['ground_truth'])]
+    #y = torch.LongTensor(adata.obs['label'].values).to(device)
 
     preprocess(args, adata)
     feat = torch.FloatTensor(adata.obsm['feat'].copy()).to(device)

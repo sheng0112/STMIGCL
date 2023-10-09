@@ -6,6 +6,7 @@ import pandas as pd
 import scipy.sparse as sp
 from scipy.sparse.csc import csc_matrix
 from scipy.sparse.csr import csr_matrix
+from sklearn.decomposition import PCA
 from sklearn.neighbors import kneighbors_graph
 
 
@@ -93,11 +94,6 @@ def spatial_construct_graph(adata, radius=150):
     norm = adj_ori.shape[0] ** 2 / (2 * (adj_ori.shape[0] ** 2 - adj_ori.sum()))
 
     return adj, adj_ori, adj_label, pos_weight, norm
-
-
-def pred_result(y_pred, y_true):
-    correct = float(y_pred.eq(y_true).sum().item())
-    return correct
 
 
 def sigmoid(x):

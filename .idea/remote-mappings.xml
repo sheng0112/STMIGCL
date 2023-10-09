@@ -6,7 +6,7 @@
         <remote-mappings server-id="python@sshConfig://root@10.9.21.236:25462 password/opt/data/private/py38/bin/python3">
           <settings>
             <list>
-              <mapping local-root="$PROJECT_DIR$" remote-root="/opt/data/private/ST-iGCL" />
+              <mapping local-root="$PROJECT_DIR$" remote-root="/opt/data/private/STMIGCL" />
             </list>
           </settings>
         </remote-mappings>
